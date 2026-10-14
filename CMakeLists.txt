@@ -4,9 +4,8 @@
 # `strata-pack` are added when their sources exist - a target with no sources would make the build graph
 # claim something the tree does not have, which is worse than an absent target.
 #
-# CUDA targets arrive in Phase 2.  The kernels need sm_80 or newer (tf32 mma, bf16 math) and the guard
-# below refuses anything older: silently building for a pre-Ampere arch would produce a binary that runs
-# and is wrong about its own performance, which is the worst of both outcomes.
+# CUDA targets have architecture-specific dispatch. The default build targets current NVIDIA cards; an opt-in
+# CUDA 12 build covers older architectures through portable/fallback kernels.
 cmake_minimum_required(VERSION 3.24)
 project(strata VERSION 0.1.44.1 LANGUAGES CXX)
 # EXPERIMENTAL: the Intel Arc engine, the SYCL port in sycl/ (PR #423; icpx + oneMKL, docs/INTEL_ARC.md). It is its
@@ -147,7 +146,7 @@ if(STRATA_HIP_GFX906)
   set(_strata_gpu_include_directories ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 elseif(STRATA_ENABLE_CUDA)
   # #585: CMake links CUDA code with the STATIC runtime by default, and the targets below also link CUDA::cudart (the
-  # DLL's import library).  MSVC with a CUDA 12.x toolkit - the experimental Pascal/Volta build - then fails with
+  # DLL's import library).  MSVC with a CUDA 12.x toolkit - the experimental older-GPU build - then fails with
   # LNK1169 (every cudart symbol defined twice); GNU ld lets it pass.  That build links the shared runtime alone.  The
   # ready-made engine (CUDA 13, no STRATA_EXPERIMENTAL_SM60) is unchanged; -DCMAKE_CUDA_RUNTIME_LIBRARY overrides.
   if(MSVC AND STRATA_EXPERIMENTAL_SM60 AND NOT DEFINED CMAKE_CUDA_RUNTIME_LIBRARY)
@@ -157,7 +156,7 @@ elseif(STRATA_ENABLE_CUDA)
   # `enable_language(CUDA)` gives the .cu compile rules but NOT the imported targets, so `CUDA::cudart` has to
   # be brought in explicitly for the host-side tests that call cudaMalloc themselves.
   find_package(CUDAToolkit REQUIRED)
-  option(STRATA_EXPERIMENTAL_SM60 "community build for GPUs below compute capability 7.5: Pascal sm_60, Volta sm_70 (#236)" OFF)
+  option(STRATA_EXPERIMENTAL_SM60 "experimental CUDA 12 build for Maxwell sm_52 through Volta sm_70 (historical option name)" OFF)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 120 CACHE STRING "CUDA architectures" FORCE)
   endif()
@@ -169,21 +168,21 @@ elseif(STRATA_ENABLE_CUDA)
     if(_base STREQUAL "native" OR _base STREQUAL "all" OR _base STREQUAL "all-major")
       continue()
     endif()
-    # STRATA_EXPERIMENTAL_SM60: a Pascal (sm_60, GP100-class) or Volta (sm_70, V100 / Titan V, #236) build.
-    # These sit below every architecture the kernels were written for, so two intrinsics are replaced below
-    # their arch - `__dp4a` (6.1+) and `__nanosleep` (7.0+) - in include/strata/kernels/dp4a.hpp, which is
-    # bit-exact for the first and merely a shorter pause for the second (sm_70 has both).  Community-tested,
-    # not in the ready-made engine; RTX 20/30/40/50 cards must use the release engine instead.  It needs a CUDA
-    # 12.x toolkit: CUDA 13 dropped sm_60 and sm_70 (nvcc fails CMake's compiler test with "compute_70").
+    # STRATA_EXPERIMENTAL_SM60: a Maxwell (sm_52, Tesla M40), Pascal (sm_60+), or Volta (sm_70, V100 / Titan V) build.
+    # These sit below the default architecture floor, so two intrinsics are replaced below their arch - `__dp4a`
+    # (6.1+) and `__nanosleep` (7.0+) - in include/strata/kernels/dp4a.hpp. The first has an exact fallback and
+    # the second becomes a spin loop. The M40 target is still under validation; this is not the ready-made engine.
+    # RTX 20/30/40/50 cards should use the release engine instead. It needs a CUDA
+    # 12.x toolkit: CUDA 13 dropped Maxwell, Pascal and Volta (nvcc fails CMake's compiler test for these targets).
     if(_base LESS 75 AND NOT STRATA_EXPERIMENTAL_SM60)
       message(FATAL_ERROR
         "Strata needs an NVIDIA GPU of compute capability 7.5 or newer (RTX 20 / 30 / 40 / 50 series), but "
-        "CMAKE_CUDA_ARCHITECTURES is '${CMAKE_CUDA_ARCHITECTURES}'.  (A Pascal sm_60 or Volta sm_70 build is "
+        "CMAKE_CUDA_ARCHITECTURES is '${CMAKE_CUDA_ARCHITECTURES}'.  (A Maxwell sm_52, Pascal or Volta build is "
         "-DSTRATA_EXPERIMENTAL_SM60=ON; upstream does not support it.)")
     endif()
-    if(_base LESS 60)
+    if(_base LESS 52)
       message(FATAL_ERROR "CMAKE_CUDA_ARCHITECTURES '${CMAKE_CUDA_ARCHITECTURES}': even the experimental build "
-                          "needs compute capability 6.0 (sm_60) or newer")
+                          "needs compute capability 5.2 (sm_52) or newer")
     endif()
     # #220 / #224: RTX 50 engines built with CUDA 12.8 crashed in the prompt path on Linux (13.0 and newer did not)
     if(_base GREATER_EQUAL 120 AND CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 13.0)
@@ -192,7 +191,7 @@ elseif(STRATA_ENABLE_CUDA)
     endif()
   endforeach()
   if(STRATA_EXPERIMENTAL_SM60)
-    # every target sees it: the Pascal / Volta code paths (the Volta prompt attention, PR #600) are compiled into this
+    # every target sees it: the Maxwell / Pascal / Volta code paths (including Volta prompt attention, PR #600) enter
     # build only, so the ready-made engine (sm_75+) keeps exactly the code it had
     add_compile_definitions(STRATA_EXPERIMENTAL_SM60=1)
   endif()

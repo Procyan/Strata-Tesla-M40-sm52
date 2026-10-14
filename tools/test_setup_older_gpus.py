@@ -1,4 +1,4 @@
-"""Older NVIDIA GPUs (experimental): Pascal / Volta run a second engine built with CUDA 12 (engine-cuda12/), chosen per
+"""Older NVIDIA GPUs (experimental): Maxwell / Pascal / Volta run a second engine built with CUDA 12 (engine-cuda12/), chosen per
 model config by its oldest card; --cuda 12|13 overrides it.  A PC whose cards the ready-made CUDA 13 engine runs on
 gets exactly what it got before.  No GPU, no downloads.
 
@@ -28,13 +28,14 @@ def card(i, name, vram, arch, driver="580.97"):
 
 V100 = card(0, "Tesla V100-PCIE-32GB", 32.0, "70", "575.57")
 P40 = card(0, "Tesla P40", 24.0, "61", "535.104")
+M40 = card(0, "Tesla M40 24GB", 24.0, "52", "582.78")
 
 
 class Choice(unittest.TestCase):
     def test_by_the_oldest_card(self):
         self.assertEqual(setup.cuda_choice(["120"]), (13, None))
         self.assertEqual(setup.cuda_choice([75, 86, 89]), (13, None))
-        for archs in ([70], [61], [60], [70, 86]):
+        for archs in ([70], [61], [60], [52], [70, 86], [52, 86]):
             tk, why = setup.cuda_choice(archs)
             self.assertEqual(tk, 12, archs)
             self.assertIn(f"sm_{min(archs)} is older than CUDA 13 supports", why)
@@ -60,7 +61,7 @@ class Choice(unittest.TestCase):
 
 
 class OptIn(unittest.TestCase):
-    """Pascal / Volta cards are used only when chosen; a PC with a newer card keeps recommending the newer one."""
+    """Maxwell / Pascal / Volta cards are used only when chosen; a PC with a newer card keeps recommending it."""
 
     def setUp(self):
         self.env = mock.patch.dict(os.environ, {"STRATA_EXPERIMENTAL_SM60": ""})
@@ -79,7 +80,8 @@ class OptIn(unittest.TestCase):
         self.assertEqual(setup.old_gpus_opt_in([rtx, v100], cuda="12"), "--cuda 12")
         self.assertIn("only kind", setup.old_gpus_opt_in([V100]))
         self.assertIsNone(setup.old_gpus_opt_in([V100], other=True))            # an AMD card it can use instead
-        self.assertIsNone(setup.old_gpus_opt_in([card(0, "GTX 980", 4.0, "52")]))
+        self.assertIn("only kind", setup.old_gpus_opt_in([M40]))
+        self.assertIsNone(setup.old_gpus_opt_in([card(0, "GTX 750 Ti", 2.0, "50")]))
         with mock.patch.dict(os.environ, {"STRATA_EXPERIMENTAL_SM60": "1"}):
             self.assertEqual(setup.old_gpus_opt_in([rtx, v100]), "STRATA_EXPERIMENTAL_SM60=1")
 
@@ -94,7 +96,8 @@ class OptIn(unittest.TestCase):
             self.assertIsNotNone(setup.gpu_problem(V100))
         with mock.patch.object(setup, "OLD_GPUS", "you chose GPU 0"):
             self.assertIsNone(setup.gpu_problem(V100))
-            self.assertIsNotNone(setup.gpu_problem(card(0, "GTX 980", 4.0, "52")))
+            self.assertIsNone(setup.gpu_problem(M40))
+            self.assertIsNotNone(setup.gpu_problem(card(0, "GTX 750 Ti", 2.0, "50")))
 
 
 class Libraries(unittest.TestCase):

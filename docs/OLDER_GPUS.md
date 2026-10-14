@@ -13,6 +13,7 @@ and their output stay exactly as they were. Numbers are the reporters' own, on o
 | --- | --- | --- | --- | --- |
 | Tesla P100 | 6.0 | the CUDA 12 engine | `__dp4a` emulated (bit-exact); BF16 projections through fp32 | 2x P100, IQ3_S, engine 0.1.39: prompt 526-532 tok/s, decode 28-32 tok/s at 128K prompt tokens, 3 of 3 needle checks at 122K ([report](../bench/results/2026-10-06-community-2x-p100/README.md), #1157) |
 | Tesla P40 / P4, GTX 10 series | 6.1 | the CUDA 12 engine | BF16 projections through fp32 (cuBLAS has no BF16 GEMM there, #395); the dense weights dequantized by a wide kernel, expert mode 8 and its own interleaved-matvec table; opt-in `STRATA_DENSE_F32=1`: the large dense GEMMs as `cublasSgemm` ([below](#tesla-p40-sm_61-what-was-measured-and-changed)) | P40, IQ3_S, engine 0.1.30: prompt 217-374 tok/s, decode 30-33 tok/s (#395); 0.1.43.1 with the sm_61 changes: prompt 255 tok/s at 565 tokens (was 205), decode 37-38 tok/s (was 34-35); with `STRATA_DENSE_F32=1` 464-474 tok/s at 7K tokens (was 360-432) |
+| Tesla M40 | 5.2 | CUDA 12 experimental; requires a source build with `STRATA_EXPERIMENTAL_SM60=ON` | Maxwell-specific kernels and sustained inference are not fully validated | One Windows M40 24 GB: Coder IQ1_M, context 131072; device self-test, six synthetic CUDA parity tests, and a short inference smoke test passed. The 8-token response measured 27.9 tokens/s and is not a benchmark. See [investigation](M40_INVESTIGATION.md) |
 | Tesla V100, Titan V | 7.0 | the CUDA 12 engine | BF16 projections on the FP16 tensor cores (#655, #540); the prompt attention on `mma.m8n8k4` (#600); a leaner attention kernel (#540) | V100-PCIE-32GB, UD-IQ4_XS: prompt 1,123-1,251 tok/s (#600); V100 32GB, IQ2_XS: prompt +22% from #540 |
 | RTX 20 (Turing) | 7.5 | **supported**, the ready-made engine | opt-in: `STRATA_BF16_TC=1` runs the BF16 projections on the FP16 tensor cores | RTX 2080 Ti, Q2_0: prompt +15-18% (#655) |
 
@@ -33,12 +34,13 @@ capability 6.1 too, and cannot hold any of the model).
 
 ## NVIDIA: the CUDA 12 engine
 
-CUDA 13 dropped Pascal and Volta: it cannot compile for them. Setup therefore keeps a **second engine**, built with
+CUDA 13 dropped Maxwell, Pascal and Volta: it cannot compile for them. Setup therefore keeps a **second engine**, built with
 CUDA 12.9 and `-DSTRATA_EXPERIMENTAL_SM60=ON`, in its own folder (`engine-cuda12\`, beside `engine\`). One engine runs
 per model, so the choice is made per model, by the oldest card that model runs on:
 
 - **Every card the model uses is RTX 20 or newer:** the ready-made CUDA 13 engine, as always.
-- **A card is Pascal or Volta:** the CUDA 12 engine. Setup says so (`CUDA 12: sm_70 is older than CUDA 13 supports
+- **A card is Maxwell, Pascal or Volta:** the CUDA 12 engine. The M40 path is experimental and still unvalidated on
+  hardware. Setup says so (`CUDA 12: sm_70 is older than CUDA 13 supports
   ...`). On Windows it downloads `strata-windows-x64-cuda12.zip` with NVIDIA's CUDA 12 libraries (from pip, like the
   CUDA 13 ones); on Linux, or with `--build`, it compiles the engine with a CUDA 12.x toolkit.
 
@@ -48,14 +50,14 @@ An older card is used only when you choose it; a PC with a newer card keeps reco
 
 | You | Setup |
 | --- | --- |
-| have only Pascal / Volta NVIDIA cards (and no AMD card it can use) | uses them, with the CUDA 12 engine |
+| have only Maxwell / Pascal / Volta NVIDIA cards (and no AMD card it can use) | uses them, with the CUDA 12 engine; M40 remains unvalidated |
 | name the card: `START-HERE.bat --setup --gpu 1`, or `--gpus 0,1` with a newer card | uses it; the model gets the CUDA 12 engine |
 | `--cuda 12` (or `STRATA_CUDA=12`) | the CUDA 12 engine for this model, on any card |
 | `--cuda 13` | the CUDA 13 engine even with an older card (a warning: it has no code for that card) |
 | `STRATA_EXPERIMENTAL_SM60=1` | the older cards are listed as usable (the setting from #295 still works) |
 
 The choice is kept in the model's config (`"cuda": 12`): its starts and `UPDATE.bat` keep it, and other models keep
-their own engine. Setting the model up again chooses again (by its cards; add `--cuda 12` to keep a forced choice). A Pascal / Volta card added to a model at a start (`--gpus`) moves that model to the
+their own engine. Setting the model up again chooses again (by its cards; add `--cuda 12` to keep a forced choice). A Maxwell / Pascal / Volta card added to a model at a start (`--gpus`) moves that model to the
 CUDA 12 engine.
 
 `--cuda 12` is also the way to run Strata with an NVIDIA driver older than 580: CUDA 12 needs 528 or newer on Windows
