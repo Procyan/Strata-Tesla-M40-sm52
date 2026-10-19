@@ -1,3 +1,5 @@
+> **Experimental Tesla M40 (Maxwell sm_52) fork:** This repository preserves the original Strata source plus the M40 CUDA compatibility patch (commit `17f3033a`). The normal Strata model selection and downloader are retained; **models have not been modified**. The `sm_52` engine requires CUDA 12.x and an M40-compatible build; downloading model weights alone does not install a working engine. The M40 port passed one Windows M40 device test and a short inference smoke test, but is not broadly validated. See [M40 investigation](docs/M40_INVESTIGATION.md). Original project: [Niko1221/Strata](https://github.com/Niko1221/Strata).
+
 <h1 align="center">Strata</h1>
 
 **English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt-BR.md)
