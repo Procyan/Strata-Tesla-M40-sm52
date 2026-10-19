@@ -188,6 +188,8 @@ MIN_DRIVER = 580                       # CUDA 13.0
 # model, so the choice is per model config, by its oldest GPU; --cuda 12|13 overrides it (docs/OLDER_GPUS.md).
 CUDA13_MIN_ARCH = 75                   # the oldest compute capability CUDA 13 compiles for (sm_75, RTX 20)
 CUDA12_ASSET = "strata-windows-x64-cuda12.zip" if WIN else "strata-linux-x64-cuda12.zip"
+# Maxwell sm_52: prefer this fork’s separately published small compiled engine (model downloads stay upstream).
+M40_PREBUILT_URL = "https://github.com/Procyan/Strata-Tesla-M40-sm52/releases/download/v0.1.0-m40-original/"
 CUDA12_WHEELS = ["nvidia-cublas-cu12==12.9.1.4", "nvidia-cuda-runtime-cu12==12.9.79"]
 # CUDA 12.x minor-version compatibility (NVIDIA's table: Linux 525.60.13, Windows 527.41); the wheels match the 12.9.1
 # toolkit the CUDA 12 zip is built with (cuBLAS 12.9.1.4, runtime 12.9.79).  Not tested on such an old driver here.
@@ -5351,7 +5353,16 @@ def ensure_engine_for(cards, cfg_path: Path, cfg: dict, yes: bool) -> dict:
 def get_cuda12_engine(url_base, gpu, vision, yes, build=False) -> Path:
     """The experimental CUDA 12 engine for these cards (gpu["archs"]): the ready-made one (Windows) with NVIDIA's
     CUDA 12 libraries, or compiled here with a CUDA 12.x toolkit (Linux, --build, or no ready-made one)."""
-    eng = None if build else get_prebuilt(url_base, gpu, vision, toolkit=12)
+    # The original Strata model downloader is unchanged. On Windows sm_52, prefer the
+    # Maxwell engine released by this fork; unlike the upstream CUDA 12 asset, its
+    # architecture list explicitly contains 52. No CUDA toolchain is required when
+    # that prebuilt asset exists. An explicit --prebuilt override always wins.
+    archs = [int(a) for a in gpu.get("archs", [gpu["arch"]])]
+    chosen = url_base
+    if WIN and 52 in archs and url_base == PREBUILT_URL:
+        chosen = M40_PREBUILT_URL
+        say("  Tesla M40 sm_52: looking for the precompiled Maxwell engine from this fork.")
+    eng = None if build else get_prebuilt(chosen, gpu, vision, toolkit=12)
     if eng is not None and json.loads((eng / "BUILD.json").read_text(encoding="utf-8")).get("source") != "local":
         pip_cuda_libs(12)
         if vision != "none" and not (eng / VEXE).exists():
