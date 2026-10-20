@@ -5498,7 +5498,15 @@ def engine_step(a, gpu, hip, amd, cuda_tk, vision):
         gpu = hip_card(eng, gpu, amd)
         a.gpu = gpu["index"] if gpu["count"] > 1 else a.gpu
     else:
-        eng = None if a.build or hip else get_prebuilt(a.prebuilt, gpu, vision, **({"toolkit": 12} if cuda_tk == 12
+        # The initial installation uses get_prebuilt() directly (not get_cuda12_engine()).
+        # For Maxwell sm_52, take this fork's tagged engine instead of upstream's
+        # Pascal/Volta-only CUDA12 asset. Honor an explicit --prebuilt override.
+        engine_url = a.prebuilt
+        if WIN and cuda_tk == 12 and a.prebuilt == PREBUILT_URL and (
+                52 in [int(x) for x in gpu.get("archs", [gpu["arch"]])]):
+            engine_url = M40_PREBUILT_URL
+            say("  Tesla M40 sm_52: using the precompiled Maxwell engine from this fork.")
+        eng = None if a.build or hip else get_prebuilt(engine_url, gpu, vision, **({"toolkit": 12} if cuda_tk == 12
                                                                                     else {}))
     if eng is not None and not hip and json.loads((eng / "BUILD.json").read_text(encoding="utf-8")).get("source") != "local":
         pip_cuda_libs(cuda_tk)
