@@ -23,7 +23,8 @@ $meta = [ordered]@{
     ptx = $false
     vision = 'none'
 }
-$meta | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $work 'BUILD.json') -Encoding UTF8
+# Windows PowerShell 5.1's -Encoding UTF8 adds a BOM, which setup.py rejects.
+[System.IO.File]::WriteAllText((Join-Path $work 'BUILD.json'), ($meta | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
 if (Test-Path $out) { Remove-Item -LiteralPath $out -Force }
 Compress-Archive -Path (Join-Path $work '*') -DestinationPath $out -CompressionLevel Optimal
 Write-Host "Prepared engine asset (NOT model files):" -ForegroundColor Green
