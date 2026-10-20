@@ -25,7 +25,7 @@ try {
  $files = @("strata.exe","strata_kq.dll","strata-vision.exe","BUILD.json")
  foreach ($item in $files) { $src = Join-Path $EngineDir $item; if (Test-Path $src) { Copy-Item $src (Join-Path $temp $item) -Force } }
  $metadata.source = "prebuilt"
- $metadata | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $temp "BUILD.json") -Encoding UTF8
+ [IO.File]::WriteAllText((Join-Path $temp "BUILD.json"), ($metadata | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding($false)))
  $output = Join-Path $root "strata-windows-x64-cuda12.zip"
  if (Test-Path $output) { Remove-Item $output -Force }
  Compress-Archive -Path (Join-Path $temp "*") -DestinationPath $output -CompressionLevel Optimal
