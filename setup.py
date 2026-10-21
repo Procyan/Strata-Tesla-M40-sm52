@@ -5361,7 +5361,7 @@ def get_cuda12_engine(url_base, gpu, vision, yes, build=False) -> Path:
     chosen = url_base
     if WIN and 52 in archs and url_base == PREBUILT_URL:
         chosen = M40_PREBUILT_URL
-        say("  Tesla M40 sm_52: looking for the precompiled Maxwell engine from this fork.")
+        say("  Tesla M40 sm_52: checking the fork's precompiled CUDA12 engine release.")
     eng = None if build else get_prebuilt(chosen, gpu, vision, toolkit=12)
     if eng is not None and json.loads((eng / "BUILD.json").read_text(encoding="utf-8")).get("source") != "local":
         pip_cuda_libs(12)
@@ -5505,7 +5505,7 @@ def engine_step(a, gpu, hip, amd, cuda_tk, vision):
         if WIN and cuda_tk == 12 and a.prebuilt == PREBUILT_URL and (
                 52 in [int(x) for x in gpu.get("archs", [gpu["arch"]])]):
             engine_url = M40_PREBUILT_URL
-            say("  Tesla M40 sm_52: using the precompiled Maxwell engine from this fork.")
+            say("  Tesla M40 sm_52: checking the fork's precompiled CUDA12 engine release.")
         eng = None if a.build or hip else get_prebuilt(engine_url, gpu, vision, **({"toolkit": 12} if cuda_tk == 12
                                                                                     else {}))
     if eng is not None and not hip and json.loads((eng / "BUILD.json").read_text(encoding="utf-8")).get("source") != "local":
